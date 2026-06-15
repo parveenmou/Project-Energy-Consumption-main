@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import pandas as pd
@@ -162,3 +164,15 @@ def predict(req: PredictReq):
     overrides = {k: v for k, v in req.dict().items() if v is not None}
     value = predict_one(result["model"], result["feature_cols"], result["defaults"], overrides)
     return {"predicted_wh": round(max(0.0, value), 1)}
+
+
+# ── Serve React build in production ──────────────────────────────────────────
+_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if _dist.exists():
+    app.mount("/assets", StaticFiles(directory=str(_dist / "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str = ""):
+        return FileResponse(str(_dist / "index.html"))

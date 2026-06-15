@@ -3,8 +3,6 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .eggs/
-build/
-dist/
 
 # Virtual environments
 venv/
@@ -20,3 +18,11 @@ env/
 Thumbs.db
 .idea/
 .vscode/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Generated data (auto-created on first run)
+data/*.csv
