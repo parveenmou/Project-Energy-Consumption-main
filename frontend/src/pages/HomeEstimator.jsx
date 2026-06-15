@@ -45,6 +45,12 @@ function ApplianceRow({ app, onToggle, onChange }) {
   )
 }
 
+const DEFAULT_ROOMS = [
+  { id: 1, name: 'Living Room', count: 4, type: 'LED Bulb',      hours: 6 },
+  { id: 2, name: 'Bedroom 1',   count: 2, type: 'LED Bulb',      hours: 4 },
+  { id: 3, name: 'Kitchen',     count: 3, type: 'LED Tube Light', hours: 5 },
+]
+
 export default function HomeEstimator() {
   const navigate    = useNavigate()
   const [homeName, setHomeName] = useState('My Home')
@@ -52,11 +58,7 @@ export default function HomeEstimator() {
   const [activeTab, setActiveTab] = useState('lighting')
   const [saved, setSaved]       = useState(false)
 
-  const [rooms, setRooms] = useState([
-    { id: 1, name: 'Living Room', count: 4, type: 'LED Bulb',      hours: 6 },
-    { id: 2, name: 'Bedroom 1',   count: 2, type: 'LED Bulb',      hours: 4 },
-    { id: 3, name: 'Kitchen',     count: 3, type: 'LED Tube Light', hours: 5 },
-  ])
+  const [rooms, setRooms] = useState(DEFAULT_ROOMS)
 
   const [appliances, setAppliances] = useState(
     APPLIANCE_LIBRARY.map(a => ({ ...a, count: 1, hours: a.defaultHours, enabled: false }))
@@ -90,7 +92,14 @@ export default function HomeEstimator() {
     else history.unshift(entry)
     localStorage.setItem('energyHistory', JSON.stringify(history))
     setSaved(true)
-    setTimeout(() => { setSaved(false); navigate('/') }, 1200)
+    setTimeout(() => {
+      setHomeName('My Home')
+      setRate(8)
+      setRooms(DEFAULT_ROOMS)
+      setAppliances(APPLIANCE_LIBRARY.map(a => ({ ...a, count: 1, hours: a.defaultHours, enabled: false })))
+      setSaved(false)
+      navigate('/')
+    }, 1200)
   }
 
   return (

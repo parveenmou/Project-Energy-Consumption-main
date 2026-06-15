@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend,
@@ -14,7 +15,7 @@ function formatDate(iso) {
   })
 }
 
-function EstimateCard({ entry, isSelected, colorDot, onToggle, onDelete }) {
+function EstimateCard({ entry, isSelected, colorDot, onToggle, onDelete, onViewDashboard }) {
   const r = entry.results
   return (
     <div
@@ -79,11 +80,19 @@ function EstimateCard({ entry, isSelected, colorDot, onToggle, onDelete }) {
           )}
         </div>
       )}
+
+      <button
+        onClick={e => { e.stopPropagation(); onViewDashboard() }}
+        className="mt-3 w-full py-1.5 text-xs rounded-lg bg-accent/10 text-accent border border-accent/30 hover:bg-accent/20 transition-colors font-medium"
+      >
+        View on Dashboard →
+      </button>
     </div>
   )
 }
 
 export default function History() {
+  const navigate = useNavigate()
   const [entries, setEntries]   = useState([])
   const [selected, setSelected] = useState([])
 
@@ -108,6 +117,11 @@ export default function History() {
     if (!confirm('Delete all saved estimates?')) return
     setEntries([]); setSelected([])
     localStorage.removeItem('energyHistory')
+  }
+
+  const viewOnDashboard = (entry) => {
+    localStorage.setItem('currentHome', JSON.stringify(entry))
+    navigate('/')
   }
 
   const compared = entries.filter(e => selected.includes(e.id))
@@ -168,6 +182,7 @@ export default function History() {
               colorDot={selIdx !== -1 ? COLORS[selIdx % COLORS.length] : null}
               onToggle={() => toggleSelect(entry.id)}
               onDelete={() => deleteEntry(entry.id)}
+              onViewDashboard={() => viewOnDashboard(entry)}
             />
           )
         })}
