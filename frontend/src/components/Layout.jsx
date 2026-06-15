@@ -1,9 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom'
 
 const NAV = [
-  { to: '/',          label: 'Dashboard',       icon: '📊' },
-  { to: '/estimator', label: 'Home Estimator',  icon: '🏠' },
-  { to: '/history',   label: 'History',         icon: '📋' },
+  { to: '/',          label: 'My Dashboard',  icon: '📊' },
+  { to: '/estimator', label: 'Home Setup',    icon: '🏠' },
+  { to: '/history',   label: 'History',       icon: '📋' },
 ]
 
 export default function Layout() {
@@ -37,8 +37,8 @@ export default function Layout() {
         </nav>
 
         <div className="p-4 border-t border-edge text-muted text-xs space-y-0.5">
-          <div>React + Vite + FastAPI</div>
-          <div>RandomForest ML Model</div>
+          <div>React + Vite · All data</div>
+          <div>stays on your device</div>
         </div>
       </aside>
 

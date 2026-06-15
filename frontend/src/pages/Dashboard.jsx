@@ -1,320 +1,275 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell, Legend, AreaChart, Area,
 } from 'recharts'
 import KPICard from '../components/KPICard'
-import { api } from '../api'
+import { calculate, generateHourlyProfile, generateSavingsTips } from '../utils/calculate'
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const PALETTE = ['#58A6FF', '#3FB950', '#F78166', '#D2A8FF', '#E3B341', '#79C0FF', '#56D364']
 const TIP = { backgroundColor: '#161B22', border: '1px solid #30363D', borderRadius: 8, color: '#E6EDF3', fontSize: 12 }
 
-/* ── Heatmap (24 hours × 7 days grid) ── */
-function Heatmap({ data }) {
-  if (!data.length) return null
-  const vals = data.map(d => d.value)
-  const lo = Math.min(...vals)
-  const hi = Math.max(...vals)
-
-  const grid = Array.from({ length: 24 }, (_, h) =>
-    Array.from({ length: 7 }, (_, d) => {
-      const cell = data.find(item => item.hour === h && item.dayofweek === d)
-      return cell ? cell.value : 0
-    })
-  )
-
-  const color = (v) => {
-    const r = (v - lo) / (hi - lo)
-    return `rgb(${Math.round(r * 88)},${Math.round(20 + r * 145)},${Math.round(60 + r * 195)})`
-  }
-
+function WelcomeScreen() {
+  const navigate = useNavigate()
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[500px]">
-        <div className="flex mb-1 ml-8">
-          {DAYS.map(d => (
-            <div key={d} className="flex-1 text-center text-muted text-xs">{d}</div>
-          ))}
-        </div>
-        {grid.map((row, h) => (
-          <div key={h} className="flex items-center mb-px">
-            <div className="w-8 text-muted text-xs text-right pr-2 shrink-0">{h}h</div>
-            {row.map((val, d) => (
-              <div
-                key={d}
-                className="flex-1 h-5 mx-px rounded-sm cursor-default"
-                style={{ backgroundColor: color(val) }}
-                title={`${DAYS[d]} ${h}:00 — ${val.toFixed(0)} Wh avg`}
-              />
-            ))}
-          </div>
-        ))}
-        <div className="flex justify-between mt-2 ml-8 text-xs text-muted">
-          <span>Low ({lo.toFixed(0)} Wh)</span>
-          <span>High ({hi.toFixed(0)} Wh)</span>
-        </div>
+    <div className="flex items-center justify-center min-h-screen bg-bg">
+      <div className="text-center max-w-md px-6">
+        <div className="text-7xl mb-6">⚡</div>
+        <h1 className="text-3xl font-bold text-white mb-3">Smart Home Energy Hub</h1>
+        <p className="text-muted text-base mb-8 leading-relaxed">
+          Enter your home details — lights, appliances, usage hours — and instantly see your
+          personalized energy dashboard with cost estimates and saving tips.
+        </p>
+        <button
+          onClick={() => navigate('/estimator')}
+          className="px-8 py-3 bg-accent text-bg rounded-xl font-semibold text-base hover:bg-accent/80 transition-colors"
+        >
+          Set Up My Home →
+        </button>
+        <p className="text-muted text-xs mt-4">No account needed · All data stays on your device</p>
       </div>
     </div>
   )
 }
 
-/* ── What-If Simulator ── */
-function WhatIfSimulator({ defaults }) {
-  const [form, setForm] = useState({
-    T_out: 10, RH_out: 75, lights: 30, hour: 12, is_weekend: 0,
-  })
-  const [result, setResult] = useState(null)
-  const [loading, setLoading] = useState(false)
-
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
-
-  const run = async () => {
-    setLoading(true)
-    try { setResult(await api.predict(form)) }
-    catch (e) { console.error(e) }
-    finally { setLoading(false) }
-  }
-
-  const Slider = ({ label, field, min, max, step = 1, unit = '' }) => (
-    <div>
-      <div className="flex justify-between text-xs text-muted mb-1">
-        <span>{label}</span>
-        <span className="text-white">{form[field]}{unit}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={form[field]}
-        onChange={e => set(field, Number(e.target.value))}
-        className="w-full" />
-    </div>
-  )
+function RateSimulator({ baseResults, rooms, appliances }) {
+  const [rate, setRate] = useState(baseResults.rate ?? 8)
+  const sim = { ...baseResults, monthlyCost: +(baseResults.monthlyKwh * rate).toFixed(0) }
 
   return (
     <div className="bg-card border border-edge rounded-xl p-6">
-      <h3 className="text-white font-semibold mb-4">What-If Simulator</h3>
-      <div className="space-y-4">
-        <Slider label="Outdoor Temp" field="T_out" min={-10} max={45} step={0.5} unit="°C" />
-        <Slider label="Outdoor Humidity" field="RH_out" min={10} max={100} unit="%" />
-        <Slider label="Lighting" field="lights" min={0} max={200} unit=" Wh" />
-        <Slider label="Hour of Day" field="hour" min={0} max={23} unit=":00" />
-        <div>
-          <div className="text-xs text-muted mb-1">Day type</div>
-          <div className="flex gap-2">
-            {['Weekday', 'Weekend'].map((lbl, i) => (
-              <button key={i} onClick={() => set('is_weekend', i)}
-                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
-                  form.is_weekend === i ? 'bg-accent text-bg' : 'bg-surface text-muted hover:text-white'
-                }`}>
-                {lbl}
-              </button>
-            ))}
-          </div>
+      <h3 className="text-white font-semibold mb-1">Rate What-If</h3>
+      <p className="text-muted text-xs mb-4">Change your electricity rate to see cost impact</p>
+      <div className="flex justify-between text-xs text-muted mb-1">
+        <span>₹1/kWh</span>
+        <span className="text-accent font-semibold text-sm">₹{rate}/kWh</span>
+        <span>₹20/kWh</span>
+      </div>
+      <input type="range" min="1" max="20" step="0.5" value={rate}
+        onChange={e => setRate(Number(e.target.value))}
+        className="w-full mb-4" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-bg border border-edge rounded-lg p-3 text-center">
+          <div className="text-muted text-xs mb-1">Monthly Cost</div>
+          <div className="text-2xl font-bold text-gold">₹{sim.monthlyCost}</div>
         </div>
-        <button onClick={run} disabled={loading}
-          className="w-full py-2 bg-accent text-bg rounded-lg text-sm font-semibold hover:bg-accent/80 transition-colors disabled:opacity-50">
-          {loading ? 'Predicting…' : 'Run Prediction'}
-        </button>
-        {result && (
-          <div className="bg-bg rounded-lg p-4 text-center border border-edge">
-            <div className="text-muted text-xs uppercase tracking-widest">Predicted Appliance Use</div>
-            <div className="text-4xl font-bold text-accent mt-1">{result.predicted_wh.toFixed(0)}</div>
-            <div className="text-muted text-xs mt-0.5">Wh per 10-min reading</div>
-            <div className="text-muted text-xs">≈ {(result.predicted_wh * 144 / 1000).toFixed(2)} kWh/day</div>
-          </div>
-        )}
+        <div className="bg-bg border border-edge rounded-lg p-3 text-center">
+          <div className="text-muted text-xs mb-1">Annual Cost</div>
+          <div className="text-2xl font-bold text-gold">₹{(sim.monthlyCost * 12).toLocaleString()}</div>
+        </div>
+      </div>
+      <div className="mt-3 text-xs text-muted text-center">
+        {baseResults.monthlyKwh.toFixed(1)} kWh/month × ₹{rate} = ₹{sim.monthlyCost}
       </div>
     </div>
   )
 }
 
-/* ── Main Dashboard ── */
 export default function Dashboard() {
-  const [summary, setSummary]       = useState(null)
-  const [trends, setTrends]         = useState([])
-  const [heatmap, setHeatmap]       = useState([])
-  const [hourly, setHourly]         = useState([])
-  const [tod, setTod]               = useState([])
-  const [importances, setImportances] = useState([])
-  const [modelInfo, setModelInfo]   = useState(null)
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState(null)
-  const [trendDays, setTrendDays]   = useState(60)
+  const [homeData, setHomeData] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    Promise.all([
-      api.summary(), api.trends(60), api.heatmap(),
-      api.hourly(), api.tod(), api.importances(), api.model(),
-    ]).then(([s, t, h, hr, td, imp, m]) => {
-      setSummary(s); setTrends(t); setHeatmap(h)
-      setHourly(hr); setTod(td); setImportances(imp); setModelInfo(m)
-      setLoading(false)
-    }).catch(e => { setError(e.message); setLoading(false) })
+    const saved = localStorage.getItem('currentHome')
+    if (saved) setHomeData(JSON.parse(saved))
   }, [])
 
-  useEffect(() => {
-    if (!loading && !error) api.trends(trendDays).then(setTrends)
-  }, [trendDays])
+  if (!homeData) return <WelcomeScreen />
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center">
-        <div className="text-5xl mb-4 animate-pulse">⚡</div>
-        <div className="text-muted text-sm">Loading dashboard data…</div>
-        <div className="text-muted text-xs mt-1">Training model on first run takes ~10 seconds</div>
-      </div>
-    </div>
-  )
+  const results = calculate(homeData.rooms, homeData.appliances, homeData.rate)
+  const hourly  = generateHourlyProfile(results.appBreakdown, results.lightingWh)
+  const tips    = generateSavingsTips(results, homeData.rooms)
 
-  if (error) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center max-w-sm">
-        <div className="text-4xl mb-4">⚠️</div>
-        <div className="text-white font-semibold mb-2">Backend not reachable</div>
-        <code className="text-coral text-xs block mb-4">{error}</code>
-        <div className="text-muted text-xs bg-surface rounded-lg p-3 text-left">
-          Start the API server:<br />
-          <code className="text-accent">cd backend</code><br />
-          <code className="text-accent">uvicorn main:app --reload --port 8000</code>
-        </div>
-      </div>
-    </div>
-  )
-
-  const tickX = { fill: '#8B949E', fontSize: 11 }
-  const tickY = { fill: '#8B949E', fontSize: 11 }
+  const tickStyle = { fill: '#8B949E', fontSize: 11 }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Energy Dashboard</h1>
-        <p className="text-muted text-sm mt-1">
-          {summary?.date_from} — {summary?.date_to} &middot; {summary?.records?.toLocaleString()} readings
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">{homeData.name}</h1>
+          <p className="text-muted text-sm mt-0.5">
+            Electricity rate: ₹{homeData.rate}/kWh · {homeData.rooms?.length} rooms ·{' '}
+            {homeData.appliances?.filter(a => a.enabled).length} appliances active
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/estimator')}
+          className="px-4 py-2 bg-surface border border-edge text-muted rounded-lg text-sm hover:text-white hover:border-accent transition-colors"
+        >
+          Edit Home
+        </button>
       </div>
 
-      {/* KPI row */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Total Energy"  value={summary?.total_kwh?.toLocaleString()} unit="kWh" color="text-accent" />
-        <KPICard label="Avg Daily"     value={summary?.avg_daily_kwh} unit="kWh/day" color="text-green-400" />
-        <KPICard label="Peak Hour"     value={`${summary?.peak_hour}:00`} sub="Highest avg consumption" color="text-yellow-400" />
-        <KPICard label="Model R²"      value={summary?.r2} sub={`MAE ${summary?.mae} Wh · RMSE ${summary?.rmse} Wh`} color="text-purple-400" />
+        <KPICard label="Daily Consumption" value={results.dailyKwh.toFixed(2)} unit="kWh" color="text-accent" />
+        <KPICard label="Monthly Consumption" value={results.monthlyKwh.toFixed(1)} unit="kWh" color="text-green-400" />
+        <KPICard label="Monthly Cost" value={`₹${results.monthlyCost.toLocaleString()}`} sub={`₹${(results.monthlyCost * 12).toLocaleString()} / year`} color="text-gold" />
+        <KPICard label="Top Consumer" value={results.biggestConsumer} sub={`${results.biggestConsumerKwh.toFixed(2)} kWh/day`} color="text-coral" />
       </div>
 
-      {/* Trend chart */}
-      <div className="bg-card border border-edge rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-white font-semibold">Energy Trend</h2>
-          <div className="flex gap-2">
-            {[30, 60, 90].map(d => (
-              <button key={d} onClick={() => setTrendDays(d)}
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  trendDays === d ? 'bg-accent text-bg' : 'bg-surface text-muted hover:text-white'
-                }`}>
-                {d}d
-              </button>
+      {/* Category + Appliance breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-edge rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Consumption by Category</h2>
+          {results.categories.length === 0 ? (
+            <div className="text-muted text-sm text-center py-10">No appliances added yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={results.categories} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                <XAxis type="number" stroke="#30363D" tick={tickStyle} unit=" kWh" />
+                <YAxis type="category" dataKey="name" stroke="#30363D" tick={tickStyle} width={90} />
+                <Tooltip contentStyle={TIP} formatter={v => [`${v} kWh/day`, 'Daily']} />
+                <Bar dataKey="dailyKwh" radius={[0, 4, 4, 0]}>
+                  {results.categories.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="bg-card border border-edge rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Top Appliances by Usage</h2>
+          {results.appBreakdown.length === 0 ? (
+            <div className="text-muted text-sm text-center py-10">No appliances added yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={results.appBreakdown.slice(0, 8)} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                <XAxis type="number" stroke="#30363D" tick={tickStyle} unit=" kWh" />
+                <YAxis type="category" dataKey="name" stroke="#30363D" tick={tickStyle} width={110}
+                  tickFormatter={v => v.length > 14 ? v.slice(0, 13) + '…' : v} />
+                <Tooltip contentStyle={TIP} formatter={v => [`${v} kWh/day`, 'Daily']} />
+                <Bar dataKey="dailyKwh" radius={[0, 4, 4, 0]}>
+                  {results.appBreakdown.slice(0, 8).map((_, i) => (
+                    <Cell key={i} fill={`hsl(${210 + i * 15}, 70%, ${65 - i * 4}%)`} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Hourly profile + Room lighting */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-edge rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-1">Estimated Hourly Usage</h2>
+          <p className="text-muted text-xs mb-4">Based on typical device schedules</p>
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={hourly}>
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#58A6FF" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#58A6FF" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+              <XAxis dataKey="hour" stroke="#30363D" tick={tickStyle} tickFormatter={v => `${v}h`} interval={3} />
+              <YAxis stroke="#30363D" tick={tickStyle} unit=" kWh" width={52} />
+              <Tooltip contentStyle={TIP} formatter={v => [`${v} kWh`, 'Usage']} labelFormatter={l => `${l}:00 – ${l + 1}:00`} />
+              <Area type="monotone" dataKey="energy" stroke="#58A6FF" strokeWidth={2}
+                fill="url(#areaGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-card border border-edge rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-1">Lighting by Room</h2>
+          <p className="text-muted text-xs mb-4">Daily kWh per room</p>
+          {results.roomBreakdown.length === 0 ? (
+            <div className="text-muted text-sm text-center py-10">No rooms added yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={results.roomBreakdown}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                <XAxis dataKey="name" stroke="#30363D" tick={tickStyle}
+                  tickFormatter={v => v.length > 10 ? v.slice(0, 9) + '…' : v} />
+                <YAxis stroke="#30363D" tick={tickStyle} unit=" kWh" width={52} />
+                <Tooltip contentStyle={TIP} formatter={v => [`${v} kWh/day`, 'Lighting']} />
+                <Bar dataKey="dailyKwh" radius={[4, 4, 0, 0]}>
+                  {results.roomBreakdown.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Lighting vs Appliances donut-style bar + monthly cost by category */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-edge rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Monthly Cost by Category (₹)</h2>
+          {results.categories.length === 0 ? (
+            <div className="text-muted text-sm text-center py-10">No data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={results.categories}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
+                <XAxis dataKey="name" stroke="#30363D" tick={tickStyle}
+                  tickFormatter={v => v.length > 10 ? v.slice(0,9)+'…' : v} />
+                <YAxis stroke="#30363D" tick={tickStyle} unit=" ₹" width={60} />
+                <Tooltip contentStyle={TIP} formatter={v => [`₹${v}`, 'Monthly Cost']} />
+                <Bar dataKey="monthlyCost" radius={[4, 4, 0, 0]}>
+                  {results.categories.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <RateSimulator baseResults={{ ...results, rate: homeData.rate }} />
+      </div>
+
+      {/* Savings Tips + Breakdown summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-card border border-edge rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Energy Saving Tips</h2>
+          <div className="space-y-3">
+            {tips.map((tip, i) => (
+              <div key={i} className="flex gap-3 p-3 bg-bg border border-edge rounded-lg">
+                <span className="text-xl shrink-0">{tip.icon}</span>
+                <div>
+                  <div className="text-white text-sm font-medium">{tip.title}</div>
+                  <div className="text-muted text-xs mt-0.5 leading-relaxed">{tip.desc}</div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={trends}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
-            <XAxis dataKey="date" stroke="#30363D" tick={tickX}
-              tickFormatter={v => v.slice(5)}
-              interval={Math.max(1, Math.floor(trends.length / 10))} />
-            <YAxis stroke="#30363D" tick={tickY} unit=" kWh" width={60} />
-            <Tooltip contentStyle={TIP} />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#8B949E' }} />
-            <Line type="monotone" dataKey="appliances" name="Appliances" stroke="#58A6FF" dot={false} strokeWidth={1.5} />
-            <Line type="monotone" dataKey="lights"     name="Lights"     stroke="#3FB950" dot={false} strokeWidth={1.5} />
-            <Line type="monotone" dataKey="rolling7d"  name="7-day avg"  stroke="#E3B341" dot={false} strokeWidth={2} strokeDasharray="5 5" />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Heatmap + Hourly profile */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card border border-edge rounded-xl p-6">
-          <h2 className="text-white font-semibold mb-4">Hour × Day Heatmap (avg Wh)</h2>
-          <Heatmap data={heatmap} />
-        </div>
 
         <div className="bg-card border border-edge rounded-xl p-6">
-          <h2 className="text-white font-semibold mb-4">Hourly Profile</h2>
-          <ResponsiveContainer width="100%" height={265}>
-            <BarChart data={hourly}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
-              <XAxis dataKey="hour" stroke="#30363D" tick={tickX} tickFormatter={v => `${v}h`} />
-              <YAxis stroke="#30363D" tick={tickY} unit=" Wh" width={55} />
-              <Tooltip contentStyle={TIP} formatter={v => [`${v} Wh`, 'Avg Energy']} />
-              <Bar dataKey="avg_energy" name="Avg Energy">
-                {hourly.map((_, i) => (
-                  <Cell key={i} fill={i >= 17 || i <= 6 ? '#F78166' : '#58A6FF'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex gap-4 mt-2">
-            <span className="flex items-center gap-1.5 text-xs text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-[#58A6FF] inline-block" />Day hours</span>
-            <span className="flex items-center gap-1.5 text-xs text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-[#F78166] inline-block" />Night / Evening</span>
+          <h2 className="text-white font-semibold mb-4">Consumption Split</h2>
+          <div className="mb-4">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-muted">💡 Lighting</span>
+              <span className="text-green-400 font-semibold">{results.lightingPct}%</span>
+            </div>
+            <div className="h-3 bg-bg rounded-full overflow-hidden border border-edge mb-3">
+              <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${results.lightingPct}%` }} />
+            </div>
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-muted">🔌 Appliances</span>
+              <span className="text-accent font-semibold">{results.appliancesPct}%</span>
+            </div>
+            <div className="h-3 bg-bg rounded-full overflow-hidden border border-edge">
+              <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${results.appliancesPct}%` }} />
+            </div>
           </div>
-        </div>
-      </div>
-
-      {/* Time-of-day + Feature importance */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card border border-edge rounded-xl p-6">
-          <h2 className="text-white font-semibold mb-4">Time-of-Day Distribution</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={tod} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
-              <XAxis type="number" stroke="#30363D" tick={tickX} unit=" Wh" />
-              <YAxis type="category" dataKey="period" stroke="#30363D" tick={tickY} width={80} />
-              <Tooltip contentStyle={TIP} formatter={v => [`${v} Wh`, 'Avg Energy']} />
-              <Bar dataKey="avg_energy" name="Avg Energy" radius={[0, 4, 4, 0]}>
-                {tod.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-card border border-edge rounded-xl p-6">
-          <h2 className="text-white font-semibold mb-4">Top Energy Drivers</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={importances.slice(0, 10)} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#21262D" />
-              <XAxis type="number" stroke="#30363D" tick={tickX} />
-              <YAxis type="category" dataKey="feature" stroke="#30363D" tick={tickY} width={80} />
-              <Tooltip contentStyle={TIP} formatter={v => [v.toFixed(4), 'Importance']} />
-              <Bar dataKey="importance" radius={[0, 4, 4, 0]}>
-                {importances.slice(0, 10).map((_, i) => (
-                  <Cell key={i} fill={`hsl(${210 + i * 10}, 70%, ${65 - i * 3}%)`} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* What-If + Model info */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <WhatIfSimulator defaults={modelInfo?.defaults} />
-        </div>
-
-        <div className="bg-card border border-edge rounded-xl p-6">
-          <h3 className="text-white font-semibold mb-4">Model Performance</h3>
-          <div className="space-y-3">
+          <div className="space-y-2 mt-4 border-t border-edge pt-4">
             {[
-              { label: 'Algorithm',     value: 'Random Forest' },
-              { label: 'R² Score',      value: modelInfo?.r2,                      hi: true },
-              { label: 'MAE',           value: `${modelInfo?.mae} Wh` },
-              { label: 'RMSE',          value: `${modelInfo?.rmse} Wh` },
-              { label: 'Train samples', value: modelInfo?.n_train?.toLocaleString() },
-              { label: 'Test samples',  value: modelInfo?.n_test?.toLocaleString() },
-            ].map(({ label, value, hi }) => (
-              <div key={label} className="flex justify-between text-sm border-b border-edge pb-2.5 last:border-0 last:pb-0">
+              { label: 'Lighting (daily)', value: `${(results.lightingWh/1000).toFixed(2)} kWh`, color: 'text-green-400' },
+              { label: 'Appliances (daily)', value: `${(results.appliancesWh/1000).toFixed(2)} kWh`, color: 'text-accent' },
+              { label: 'Total (daily)', value: `${results.dailyKwh.toFixed(2)} kWh`, color: 'text-white' },
+              { label: 'Total (monthly)', value: `${results.monthlyKwh.toFixed(1)} kWh`, color: 'text-white' },
+              { label: 'Est. Monthly Bill', value: `₹${results.monthlyCost.toLocaleString()}`, color: 'text-gold' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="flex justify-between text-sm border-b border-edge pb-1.5 last:border-0 last:pb-0">
                 <span className="text-muted">{label}</span>
-                <span className={hi ? 'text-green-400 font-semibold' : 'text-white'}>{value}</span>
+                <span className={`${color} font-medium`}>{value}</span>
               </div>
             ))}
           </div>
